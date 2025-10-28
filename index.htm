@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Colony Sim</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #282c34;
+            color: #f1f1f1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        h1 {
+            color: #61afef;
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 2px solid #61afef;
+            border-radius: 8px;
+            background-color: #21252b;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        canvas {
+            background-color: #3f444f;
+            display: block;
+            border-bottom: 2px solid #61afef;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+        }
+
+        #ui-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            padding: 15px;
+            box-sizing: border-box;
+            background-color: #282c34;
+            border-radius: 0 0 6px 6px;
+        }
+
+        #resources {
+            font-size: 1.1em;
+        }
+
+        #resources span {
+            margin-right: 20px;
+            color: #98c379;
+        }
+
+        #resources span.stone {
+            color: #e5c07b;
+        }
+
+        #build-menu button {
+            font-size: 1em;
+            padding: 8px 12px;
+            margin-left: 10px;
+            background-color: #61afef;
+            color: #21252b;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        #build-menu button:hover {
+            background-color: #c678dd;
+        }
+
+        #build-menu button.active {
+            background-color: #98c379;
+            transform: scale(1.05);
+            box-shadow: 0 0 10px #98c379;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-panel">
+            <div id="resources">
+                <span id="wood-display">Madeira: 0</span>
+                <span id="stone-display" class="stone">Pedra: 0</span>
+            </div>
+            <div id="build-menu">
+                <button id="btn-cut">Cortar Árvore</button>
+                <button id="btn-mine">Minar Rocha</button>
+                <button id="btn-wall">Construir Muro</button>
+                <button id="btn-move">Mover</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuração Inicial ---
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+
+        const TILE_SIZE = 20;
+        const MAP_WIDTH_TILES = 40;
+        const MAP_HEIGHT_TILES = 30;
+
+        canvas.width = MAP_WIDTH_TILES * TILE_SIZE;
+        canvas.height = MAP_HEIGHT_TILES * TILE_SIZE;
+
+        // --- Estado do Jogo ---
+        let map = []; // 2D array [y][x]
+        let pawns = []; // Array de colonos
+        let tasks = []; // Array de tarefas pendentes
+        let resources = {
+            wood: 50,
+            stone: 50
+        };
+        let selectedTool = null; // 'cut', 'mine', 'wall'
+        let mouseTileX = 0;
+        let mouseTileY = 0;
+        let gameTick = 0;
+
+        // --- Tipos de Tile ---
+        const TILE_TYPES = {
+            GRASS: { id: 0, color: '#2a502a' },
+            TREE: { id: 1, color: '#0e3a0e' },
+            ROCK: { id: 2, color: '#686868' },
+            WALL: { id: 3, color: '#8b4513' },
+            TASK_CUT: { color: 'rgba(255, 255, 0, 0.5)' }, // Amarelo
+            TASK_MINE: { color: 'rgba(255, 165, 0, 0.5)' }, // Laranja
+            TASK_BUILD: { color: 'rgba(0, 191, 255, 0.5)' }, // Azul
+            TASK_MOVE: { color: 'rgba(255, 255, 255, 0.5)' } // Branco
+        };
+
+        // --- Classes Simples ---
+        class Pawn {
+            constructor(x, y) {
+                this.x = x; // Posição em tile
+                this.y = y; // Posição em tile
+                this.state = 'idle'; // 'idle', 'moving', 'working'
+                this.task = null; // Tarefa atual
+                this.workProgress = 0;
+                this.color = '#3498db'; // Azul
+            }
+        }
+
+        class Task {
+            constructor(type, x, y) {
+                this.type = type; // 'cut', 'mine', 'wall'
+                this.x = x;
+                this.y = y;
+            }
+        }
+
+        // --- Funções de Inicialização ---
+        function initializeMap() {
+            map = [];
+            for (let y = 0; y < MAP_HEIGHT_TILES; y++) {
+                const row = [];
+                for (let x = 0; x < MAP_WIDTH_TILES; x++) {
+                    let type = TILE_TYPES.GRASS;
+                    if (Math.random() > 0.85) {
+                        type = TILE_TYPES.TREE;
+                    } else if (Math.random() > 0.93) {
+                        type = TILE_TYPES.ROCK;
+                    }
+                    row.push({ ...type }); // Clona o objeto
+                }
+                map.push(row);
+            }
+        }
+
+        function initializePawns() {
+            pawns.push(new Pawn(10, 10));
+            pawns.push(new Pawn(12, 10));
+        }
+
+        // --- Funções de Desenho (Renderização) ---
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawMap();
+            drawTasks();
+            drawPawns();
+            drawMouseHighlight();
+            updateUI();
+        }
+
+        function drawMap() {
+            for (let y = 0; y < MAP_HEIGHT_TILES; y++) {
+                for (let x = 0; x < MAP_WIDTH_TILES; x++) {
+                    ctx.fillStyle = map[y][x].color;
+                    ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1); // -1 para grid
+                }
+            }
+        }
+
+        function drawTasks() {
+            tasks.forEach(task => {
+                let taskColor = 'rgba(255, 255, 255, 0.3)'; // Default
+                if (task.type === 'cut') taskColor = TILE_TYPES.TASK_CUT.color;
+                if (task.type === 'mine') taskColor = TILE_TYPES.TASK_MINE.color;
+                if (task.type === 'wall') taskColor = TILE_TYPES.TASK_BUILD.color;
+                if (task.type === 'move') taskColor = TILE_TYPES.TASK_MOVE.color;
+                
+                ctx.fillStyle = taskColor;
+                ctx.fillRect(task.x * TILE_SIZE, task.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            });
+        }
+
+        function drawPawns() {
+            pawns.forEach(pawn => {
+                ctx.fillStyle = pawn.color;
+                ctx.beginPath();
+                ctx.arc(
+                    pawn.x * TILE_SIZE + TILE_SIZE / 2,
+                    pawn.y * TILE_SIZE + TILE_SIZE / 2,
+                    TILE_SIZE / 2.5, // Raio
+                    0, Math.PI * 2
+                );
+                ctx.fill();
+
+                // Desenha barra de progresso se estiver trabalhando
+                if (pawn.state === 'working') {
+                    const progress = pawn.workProgress / 100; // 100 ticks para completar
+                    ctx.fillStyle = '#98c379';
+                    ctx.fillRect(
+                        pawn.x * TILE_SIZE,
+                        pawn.y * TILE_SIZE - 5,
+                        TILE_SIZE * progress,
+                        3
+                    );
+                }
+            });
+        }
+
+        function drawMouseHighlight() {
+            if (!selectedTool) return;
+            ctx.strokeStyle = '#f1f1f1';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(mouseTileX * TILE_SIZE, mouseTileY * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+
+        function updateUI() {
+            document.getElementById('wood-display').innerText = `Madeira: ${resources.wood}`;
+            document.getElementById('stone-display').innerText = `Pedra: ${resources.stone}`;
+
+            // Atualiza botões ativos
+            document.getElementById('btn-cut').classList.toggle('active', selectedTool === 'cut');
+            document.getElementById('btn-mine').classList.toggle('active', selectedTool === 'mine');
+            document.getElementById('btn-wall').classList.toggle('active', selectedTool === 'wall');
+            document.getElementById('btn-move').classList.toggle('active', selectedTool === 'move');
+        }
+
+        // --- Funções de Lógica (Atualização) ---
+        function update() {
+            gameTick++;
+            // A IA só roda a cada N ticks para desacelerar
+            if (gameTick % 10 === 0) { 
+                updatePawns();
+            }
+        }
+
+        function updatePawns() {
+            pawns.forEach(pawn => {
+                if (pawn.state === 'idle') {
+                    findTask(pawn);
+                }
+                if (pawn.state === 'moving') {
+                    movePawn(pawn);
+                }
+                if (pawn.state === 'working') {
+                    workOnTask(pawn);
+                }
+            });
+        }
+
+        function findTask(pawn) {
+            // IA agora encontra a tarefa MAIS PRÓXIMA
+            if (tasks.length === 0) return;
+
+            let closestTask = null;
+            let minDistance = Infinity;
+            let taskIndex = -1;
+
+            for (let i = 0; i < tasks.length; i++) {
+                const task = tasks[i];
+                // Calcula a distância de Manhattan
+                const distance = Math.abs(pawn.x - task.x) + Math.abs(pawn.y - task.y);
+
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestTask = task;
+                    taskIndex = i;
+                }
+            }
+
+            if (closestTask) {
+                pawn.task = tasks[taskIndex]; // Atribui a tarefa ao peão
+                tasks.splice(taskIndex, 1); // Remove da fila global
+                pawn.state = 'moving';
+            }
+        }
+
+        function movePawn(pawn) {
+            // Pathfinding muito simples (sem evitar obstáculos)
+            const targetX = pawn.task.x;
+            const targetY = pawn.task.y;
+
+            if (pawn.task.type === 'move') {
+                // Lógica para tarefa de MOVIMENTO (parar NO tile)
+                if (pawn.x === targetX && pawn.y === targetY) {
+                    // Chegou ao destino
+                    pawn.task = null;
+                    pawn.state = 'idle';
+                    return;
+                }
+            } else {
+                // Lógica para tarefas de TRABALHO (parar ADJACENTE)
+                const dx = Math.abs(pawn.x - targetX);
+                const dy = Math.abs(pawn.y - targetY);
+                
+                // Está adjacente (distância de Manhattan de 1)?
+                if (dx + dy <= 1) {
+                    pawn.state = 'working';
+                    pawn.workProgress = 0;
+                    return;
+                }
+            }
+
+            // Move-se em direção ao alvo
+            if (pawn.x < targetX) pawn.x++;
+            else if (pawn.x > targetX) pawn.x--;
+            else if (pawn.y < targetY) pawn.y++;
+            else if (pawn.y > targetY) pawn.y--;
+        }
+
+        function workOnTask(pawn) {
+            pawn.workProgress++;
+            if (pawn.workProgress >= 100) { // 100 ticks = ~1.6s
+                completeTask(pawn);
+            }
+        }
+
+        function completeTask(pawn) {
+            const task = pawn.task;
+            const tile = map[task.y][task.x];
+
+            if (task.type === 'cut' && tile.id === TILE_TYPES.TREE.id) {
+                tile.id = TILE_TYPES.GRASS.id;
+                tile.color = TILE_TYPES.GRASS.color;
+                resources.wood += 10;
+            } 
+            else if (task.type === 'mine' && tile.id === TILE_TYPES.ROCK.id) {
+                tile.id = TILE_TYPES.GRASS.id;
+                tile.color = TILE_TYPES.GRASS.color;
+                resources.stone += 10;
+            }
+            else if (task.type === 'wall' && tile.id === TILE_TYPES.GRASS.id) {
+                if (resources.wood >= 5) {
+                    resources.wood -= 5;
+                    tile.id = TILE_TYPES.WALL.id;
+                    tile.color = TILE_TYPES.WALL.color;
+                } else {
+                    // Falha ao construir, coloca a tarefa de volta na fila
+                    tasks.unshift(pawn.task); 
+                }
+            }
+
+            // Limpa o estado do peão
+            pawn.task = null;
+            pawn.state = 'idle';
+            pawn.workProgress = 0;
+        }
+
+        // --- Manipuladores de Eventos ---
+        function setupEventListeners() {
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                mouseTileX = Math.floor(mouseX / TILE_SIZE);
+                mouseTileY = Math.floor(mouseY / TILE_SIZE);
+            });
+
+            canvas.addEventListener('click', () => {
+                if (!selectedTool) return;
+                
+                const x = mouseTileX;
+                const y = mouseTileY;
+
+                // Não adiciona se já houver tarefa lá
+                if (tasks.some(t => t.x === x && t.y === y)) return;
+                // Não adiciona se um peão já estiver trabalhando lá
+                if (pawns.some(p => p.task && p.task.x === x && p.task.y === y)) return;
+
+                const tile = map[y][x];
+
+                if (selectedTool === 'cut' && tile.id === TILE_TYPES.TREE.id) {
+                    tasks.push(new Task('cut', x, y));
+                }
+                else if (selectedTool === 'mine' && tile.id === TILE_TYPES.ROCK.id) {
+                    tasks.push(new Task('mine', x, y));
+                }
+                else if (selectedTool === 'wall' && tile.id === TILE_TYPES.GRASS.id) {
+                    tasks.push(new Task('wall', x, y));
+                }
+                else if (selectedTool === 'move' && tile.id === TILE_TYPES.GRASS.id) {
+                    tasks.push(new Task('move', x, y));
+                }
+            });
+
+            document.getElementById('btn-cut').addEventListener('click', () => {
+                selectedTool = (selectedTool === 'cut') ? null : 'cut';
+            });
+            document.getElementById('btn-mine').addEventListener('click', () => {
+                selectedTool = (selectedTool === 'mine') ? null : 'mine';
+            });
+            document.getElementById('btn-wall').addEventListener('click', () => {
+                selectedTool = (selectedTool === 'wall') ? null : 'wall';
+            });
+            document.getElementById('btn-move').addEventListener('click', () => {
+                selectedTool = (selectedTool === 'move') ? null : 'move';
+            });
+        }
+
+        // --- Loop Principal do Jogo ---
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Iniciar o Jogo ---
+        console.log("Iniciando simulação de colônia...");
+        initializeMap();
+        initializePawns();
+        setupEventListeners();
+        gameLoop();
+
+    </script>
+</body>
+</html>
+
+
