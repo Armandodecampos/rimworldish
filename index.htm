@@ -10,7 +10,6 @@
             background-color: #282c34;
             color: #f1f1f1;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
@@ -85,23 +84,87 @@
             transform: scale(1.05);
             box-shadow: 0 0 10px #98c379;
         }
+
+        /* --- Estilos da Lista de Tarefas --- */
+        .main-wrapper {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start; /* Alinha os itens no topo */
+            gap: 20px; /* Espaço entre o jogo e a lista de tarefas */
+        }
+
+        #task-list-container {
+            width: 250px;
+            /* A altura do canvas (600) + a altura do painel (74) - paddings e bordas */
+            height: calc(30 * 20px + 74px);
+            border: 2px solid #61afef;
+            border-radius: 8px;
+            background-color: #21252b;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            box-sizing: border-box;
+            color: #f1f1f1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #task-list-container h2 {
+            margin-top: 0;
+            color: #61afef;
+            text-align: center;
+            border-bottom: 1px solid #61afef;
+            padding-bottom: 10px;
+            flex-shrink: 0; /* Impede que o h2 encolha */
+        }
+
+        #task-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto; /* Adiciona scroll se a lista for grande */
+            flex-grow: 1; /* Faz a lista ocupar o espaço restante */
+        }
+
+        #task-list li {
+            background-color: #282c34;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+            transition: background-color 0.2s;
+            cursor: default;
+        }
+
+        #task-list li.active-task {
+            background-color: #98c379;
+            color: #21252b;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
 
-    <div id="game-container">
-        <canvas id="game-canvas"></canvas>
-        <div id="ui-panel">
-            <div id="resources">
-                <span id="wood-display">Madeira: 0</span>
-                <span id="stone-display" class="stone">Pedra: 0</span>
+    <div class="main-wrapper">
+        <div id="game-container">
+            <canvas id="game-canvas"></canvas>
+            <div id="ui-panel">
+                <div id="resources">
+                    <span id="wood-display">Madeira: 0</span>
+                    <span id="stone-display" class="stone">Pedra: 0</span>
+                </div>
+                <div id="build-menu">
+                    <button id="btn-cut">Cortar Árvore</button>
+                    <button id="btn-mine">Minar Rocha</button>
+                    <button id="btn-wall">Construir Muro</button>
+                    <button id="btn-move">Mover</button>
+                </div>
             </div>
-            <div id="build-menu">
-                <button id="btn-cut">Cortar Árvore</button>
-                <button id="btn-mine">Minar Rocha</button>
-                <button id="btn-wall">Construir Muro</button>
-                <button id="btn-move">Mover</button>
-            </div>
+        </div>
+        <div id="task-list-container">
+            <h2>Tarefas</h2>
+            <ul id="task-list">
+                <!-- Tarefas serão preenchidas via JavaScript -->
+            </ul>
         </div>
     </div>
 
@@ -119,7 +182,7 @@
 
         // --- Estado do Jogo ---
         let map = []; // 2D array [y][x]
-        let pawns = []; // Array de colonos
+        let pawn = null; // O único colono
         let tasks = []; // Array de tarefas pendentes
         let resources = {
             wood: 50,
@@ -180,9 +243,8 @@
             }
         }
 
-        function initializePawns() {
-            pawns.push(new Pawn(10, 10));
-            pawns.push(new Pawn(12, 10));
+        function initializePawn() {
+            pawn = new Pawn(10, 10);
         }
 
         // --- Funções de Desenho (Renderização) ---
@@ -190,7 +252,7 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawMap();
             drawTasks();
-            drawPawns();
+            drawPawn();
             drawMouseHighlight();
             updateUI();
         }
@@ -211,36 +273,35 @@
                 if (task.type === 'mine') taskColor = TILE_TYPES.TASK_MINE.color;
                 if (task.type === 'wall') taskColor = TILE_TYPES.TASK_BUILD.color;
                 if (task.type === 'move') taskColor = TILE_TYPES.TASK_MOVE.color;
-                
+
                 ctx.fillStyle = taskColor;
                 ctx.fillRect(task.x * TILE_SIZE, task.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             });
         }
 
-        function drawPawns() {
-            pawns.forEach(pawn => {
-                ctx.fillStyle = pawn.color;
-                ctx.beginPath();
-                ctx.arc(
-                    pawn.x * TILE_SIZE + TILE_SIZE / 2,
-                    pawn.y * TILE_SIZE + TILE_SIZE / 2,
-                    TILE_SIZE / 2.5, // Raio
-                    0, Math.PI * 2
-                );
-                ctx.fill();
+        function drawPawn() {
+            if (!pawn) return;
+            ctx.fillStyle = pawn.color;
+            ctx.beginPath();
+            ctx.arc(
+                pawn.x * TILE_SIZE + TILE_SIZE / 2,
+                pawn.y * TILE_SIZE + TILE_SIZE / 2,
+                TILE_SIZE / 2.5, // Raio
+                0, Math.PI * 2
+            );
+            ctx.fill();
 
-                // Desenha barra de progresso se estiver trabalhando
-                if (pawn.state === 'working') {
-                    const progress = pawn.workProgress / 100; // 100 ticks para completar
-                    ctx.fillStyle = '#98c379';
-                    ctx.fillRect(
-                        pawn.x * TILE_SIZE,
-                        pawn.y * TILE_SIZE - 5,
-                        TILE_SIZE * progress,
-                        3
-                    );
-                }
-            });
+            // Desenha barra de progresso se estiver trabalhando
+            if (pawn.state === 'working') {
+                const progress = pawn.workProgress / 100; // 100 ticks para completar
+                ctx.fillStyle = '#98c379';
+                ctx.fillRect(
+                    pawn.x * TILE_SIZE,
+                    pawn.y * TILE_SIZE - 5,
+                    TILE_SIZE * progress,
+                    3
+                );
+            }
         }
 
         function drawMouseHighlight() {
@@ -259,29 +320,52 @@
             document.getElementById('btn-mine').classList.toggle('active', selectedTool === 'mine');
             document.getElementById('btn-wall').classList.toggle('active', selectedTool === 'wall');
             document.getElementById('btn-move').classList.toggle('active', selectedTool === 'move');
+
+            updateTaskListUI();
+        }
+
+        function updateTaskListUI() {
+            const taskListEl = document.getElementById('task-list');
+            taskListEl.innerHTML = ''; // Limpa a lista antes de redesenhar
+
+            // Adiciona a tarefa ativa (se houver)
+            if (pawn && pawn.task) {
+                const activeTask = pawn.task;
+                const li = document.createElement('li');
+                li.textContent = `[ATIVA] ${activeTask.type} (${activeTask.x}, ${activeTask.y})`;
+                li.className = 'active-task';
+                taskListEl.appendChild(li);
+            }
+
+            // Adiciona as tarefas pendentes
+            tasks.forEach(task => {
+                const li = document.createElement('li');
+                li.textContent = `${task.type} (${task.x}, ${task.y})`;
+                taskListEl.appendChild(li);
+            });
         }
 
         // --- Funções de Lógica (Atualização) ---
         function update() {
             gameTick++;
             // A IA só roda a cada N ticks para desacelerar
-            if (gameTick % 10 === 0) { 
-                updatePawns();
+            if (gameTick % 10 === 0) {
+                updatePawn();
             }
         }
 
-        function updatePawns() {
-            pawns.forEach(pawn => {
-                if (pawn.state === 'idle') {
-                    findTask(pawn);
-                }
-                if (pawn.state === 'moving') {
-                    movePawn(pawn);
-                }
-                if (pawn.state === 'working') {
-                    workOnTask(pawn);
-                }
-            });
+        function updatePawn() {
+            if (!pawn) return;
+
+            if (pawn.state === 'idle') {
+                findTask(pawn);
+            }
+            if (pawn.state === 'moving') {
+                movePawn(pawn);
+            }
+            if (pawn.state === 'working') {
+                workOnTask(pawn);
+            }
         }
 
         function findTask(pawn) {
@@ -305,8 +389,7 @@
             }
 
             if (closestTask) {
-                pawn.task = tasks[taskIndex]; // Atribui a tarefa ao peão
-                tasks.splice(taskIndex, 1); // Remove da fila global
+                pawn.task = tasks.splice(taskIndex, 1)[0]; // Atribui e remove da fila
                 pawn.state = 'moving';
             }
         }
@@ -328,7 +411,7 @@
                 // Lógica para tarefas de TRABALHO (parar ADJACENTE)
                 const dx = Math.abs(pawn.x - targetX);
                 const dy = Math.abs(pawn.y - targetY);
-                
+
                 // Está adjacente (distância de Manhattan de 1)?
                 if (dx + dy <= 1) {
                     pawn.state = 'working';
@@ -359,7 +442,7 @@
                 tile.id = TILE_TYPES.GRASS.id;
                 tile.color = TILE_TYPES.GRASS.color;
                 resources.wood += 10;
-            } 
+            }
             else if (task.type === 'mine' && tile.id === TILE_TYPES.ROCK.id) {
                 tile.id = TILE_TYPES.GRASS.id;
                 tile.color = TILE_TYPES.GRASS.color;
@@ -372,7 +455,7 @@
                     tile.color = TILE_TYPES.WALL.color;
                 } else {
                     // Falha ao construir, coloca a tarefa de volta na fila
-                    tasks.unshift(pawn.task); 
+                    tasks.unshift(pawn.task);
                 }
             }
 
@@ -394,14 +477,14 @@
 
             canvas.addEventListener('click', () => {
                 if (!selectedTool) return;
-                
+
                 const x = mouseTileX;
                 const y = mouseTileY;
 
                 // Não adiciona se já houver tarefa lá
                 if (tasks.some(t => t.x === x && t.y === y)) return;
-                // Não adiciona se um peão já estiver trabalhando lá
-                if (pawns.some(p => p.task && p.task.x === x && p.task.y === y)) return;
+                // Não adiciona se o peão já estiver trabalhando lá
+                if (pawn && pawn.task && pawn.task.x === x && pawn.task.y === y) return;
 
                 const tile = map[y][x];
 
@@ -443,12 +526,10 @@
         // --- Iniciar o Jogo ---
         console.log("Iniciando simulação de colônia...");
         initializeMap();
-        initializePawns();
+        initializePawn();
         setupEventListeners();
         gameLoop();
 
     </script>
 </body>
 </html>
-
-
