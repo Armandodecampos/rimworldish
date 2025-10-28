@@ -140,6 +140,30 @@
             color: #21252b;
             font-weight: bold;
         }
+
+        .task-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cancel-btn {
+            background-color: #e06c75;
+            color: #21252b;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            line-height: 20px;
+            text-align: center;
+            transition: background-color 0.2s;
+        }
+
+        .cancel-btn:hover {
+            background-color: #c678dd;
+        }
     </style>
 </head>
 <body>
@@ -217,8 +241,10 @@
             }
         }
 
+        let nextTaskId = 0;
         class Task {
             constructor(type, x, y) {
+                this.id = nextTaskId++;
                 this.type = type; // 'cut', 'mine', 'wall'
                 this.x = x;
                 this.y = y;
@@ -328,21 +354,45 @@
             const taskListEl = document.getElementById('task-list');
             taskListEl.innerHTML = ''; // Limpa a lista antes de redesenhar
 
+            // Helper para criar um item da lista
+            const createTaskItem = (task, is_active) => {
+                const li = document.createElement('li');
+
+                const text = document.createElement('span');
+                text.textContent = `${is_active ? '[ATIVA] ' : ''}${task.type} (${task.x}, ${task.y})`;
+
+                const cancelButton = document.createElement('button');
+                cancelButton.textContent = 'X';
+                cancelButton.className = 'cancel-btn';
+                cancelButton.onclick = () => cancelTask(task.id, is_active);
+
+                li.className = is_active ? 'active-task task-item' : 'task-item';
+                li.appendChild(text);
+                li.appendChild(cancelButton);
+                return li;
+            };
+
             // Adiciona a tarefa ativa (se houver)
             if (pawn && pawn.task) {
-                const activeTask = pawn.task;
-                const li = document.createElement('li');
-                li.textContent = `[ATIVA] ${activeTask.type} (${activeTask.x}, ${activeTask.y})`;
-                li.className = 'active-task';
-                taskListEl.appendChild(li);
+                taskListEl.appendChild(createTaskItem(pawn.task, true));
             }
 
             // Adiciona as tarefas pendentes
             tasks.forEach(task => {
-                const li = document.createElement('li');
-                li.textContent = `${task.type} (${task.x}, ${task.y})`;
-                taskListEl.appendChild(li);
+                taskListEl.appendChild(createTaskItem(task, false));
             });
+        }
+
+        function cancelTask(taskId, is_active) {
+            if (is_active) {
+                if (pawn && pawn.task && pawn.task.id === taskId) {
+                    pawn.task = null;
+                    pawn.state = 'idle';
+                    pawn.workProgress = 0;
+                }
+            } else {
+                tasks = tasks.filter(t => t.id !== taskId);
+            }
         }
 
         // --- Funções de Lógica (Atualização) ---
@@ -517,10 +567,17 @@
         }
 
         // --- Loop Principal do Jogo ---
+        let animationFrameId;
         function gameLoop() {
             update();
             draw();
-            requestAnimationFrame(gameLoop);
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function stopGameLoop() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
         }
 
         // --- Iniciar o Jogo ---
