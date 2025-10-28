@@ -393,6 +393,7 @@
             } else {
                 tasks = tasks.filter(t => t.id !== taskId);
             }
+            draw(); // Força a atualização da UI
         }
 
         // --- Funções de Lógica (Atualização) ---
@@ -567,17 +568,10 @@
         }
 
         // --- Loop Principal do Jogo ---
-        let animationFrameId;
         function gameLoop() {
             update();
             draw();
-            animationFrameId = requestAnimationFrame(gameLoop);
-        }
-
-        function stopGameLoop() {
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
+            requestAnimationFrame(gameLoop);
         }
 
         // --- Iniciar o Jogo ---
