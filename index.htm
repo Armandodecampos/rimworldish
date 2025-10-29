@@ -286,10 +286,49 @@
         function drawMap() {
             for (let y = 0; y < MAP_HEIGHT_TILES; y++) {
                 for (let x = 0; x < MAP_WIDTH_TILES; x++) {
-                    ctx.fillStyle = map[y][x].color;
-                    ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1); // -1 para grid
+                    const tile = map[y][x];
+                    // Desenha a base de grama
+                    ctx.fillStyle = TILE_TYPES.GRASS.color;
+                    ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                    // Desenha a entidade (árvore, pedra, etc.) por cima
+                    if (tile.id === TILE_TYPES.TREE.id) {
+                        drawTree(x, y);
+                    } else if (tile.id === TILE_TYPES.ROCK.id) {
+                        drawRock(x, y);
+                    } else if (tile.id === TILE_TYPES.WALL.id) {
+                        ctx.fillStyle = tile.color;
+                        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
+                    }
                 }
             }
+        }
+
+        function drawTree(x, y) {
+            const tileX = x * TILE_SIZE;
+            const tileY = y * TILE_SIZE;
+            // Tronco
+            ctx.fillStyle = '#8b4513'; // Marrom
+            ctx.fillRect(tileX + TILE_SIZE * 0.4, tileY + TILE_SIZE * 0.6, TILE_SIZE * 0.2, TILE_SIZE * 0.4);
+            // Copa
+            ctx.fillStyle = '#228B22'; // Verde floresta
+            ctx.beginPath();
+            ctx.arc(tileX + TILE_SIZE / 2, tileY + TILE_SIZE * 0.4, TILE_SIZE / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawRock(x, y) {
+            const tileX = x * TILE_SIZE;
+            const tileY = y * TILE_SIZE;
+            ctx.fillStyle = '#808080'; // Cinza
+            ctx.beginPath();
+            ctx.moveTo(tileX + TILE_SIZE * 0.2, tileY + TILE_SIZE * 0.8);
+            ctx.lineTo(tileX + TILE_SIZE * 0.8, tileY + TILE_SIZE * 0.8);
+            ctx.lineTo(tileX + TILE_SIZE * 0.9, tileY + TILE_SIZE * 0.5);
+            ctx.lineTo(tileX + TILE_SIZE * 0.5, tileY + TILE_SIZE * 0.2);
+            ctx.lineTo(tileX + TILE_SIZE * 0.1, tileY + TILE_SIZE * 0.5);
+            ctx.closePath();
+            ctx.fill();
         }
 
         function drawTasks() {
